@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8" />
-<title>drive_removal_extrapolation</title><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
+<title>drive_removal_predictions</title><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
 
 <style type="text/css">
@@ -11780,32 +11780,17 @@ div#notebook {
 
 </div>
 </div>
-</div>date; find . | grep csv | while read full_path; do  
-    cat $full_path | awk -F, '$5 == "1" {print $0}' >> all_failures_all_smart__column_count_varies.log; done; date
-
-count the number of columns in the file by counting commas per line
-
-while read p; do echo $p | tr -cd , | wc -c; done < all_failures_all_smart__column_count_varies.log
-
-Because the columns are inconsistent, check which columns are aligned
-
-date; find . | grep csv | while read full_path; do head -n1 $full_path >> all_column_headers.log; done; date
-
-Now we can determine which columns are consistent
-
-for i in {1..130}; do echo column $i; cat all_column_headers.log | cut -d',' -f$i | sort | uniq -c; done
-
-answer: columns 1 to 31 are present in all CSVs.
-
-Reduce failure list to first 31 columns
-
-cat all_failures_all_smart__column_count_varies.log | cut -d',' -f1-31 > all_failures_smart_columns1to31.log 
+</div>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Smart_9_raw is power-on hours</p>
-<p><a href="https://en.wikipedia.org/wiki/S.M.A.R.T.#Known_ATA_S.M.A.R.T._attributes">https://en.wikipedia.org/wiki/S.M.A.R.T.#Known_ATA_S.M.A.R.T._attributes</a></p>
+<p>Expectation: random &lt; no prediction &lt; generic heuristic &lt; model-specific heuristic &lt; ML</p>
+<p>expect that failure depends on</p>
+<ul>
+<li>age of drive (wear)</li>
+<li>manufacturer, model, batch</li>
+</ul>
 
 </div>
 </div>
@@ -11820,8 +11805,8 @@ cat all_failures_all_smart__column_count_varies.log | cut -d',' -f1-31 > all_fai
 <span class="kn">import</span> <span class="nn">glob</span>
 <span class="kn">import</span> <span class="nn">pickle</span>
 <span class="kn">import</span> <span class="nn">numpy</span>
+<span class="kn">import</span> <span class="nn">datetime</span>
 <span class="kn">import</span> <span class="nn">time</span>
-<span class="kn">import</span> <span class="nn">random</span>
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
 </pre></div>
 
@@ -11852,21 +11837,70 @@ cat all_failures_all_smart__column_count_varies.log | cut -d',' -f1-31 > all_fai
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>data from Backblaze</p>
+<h1 id="no-predictions">no predictions<a class="anchor-link" href="#no-predictions">&#182;</a></h1><p>for each day, count number of drives and number of drives removed from service</p>
+<ul>
+<li>TP=0</li>
+<li>TN=97.45%</li>
+<li>FP=0</li>
+<li>FN=2.55%</li>
+</ul>
+<p>error rate = (FP+FN)/total=2.55 (lower is better)</p>
 
 </div>
 </div>
-</div>
+</div>find . | grep csv | while read fullpath; do 
+    filename=`echo $fullpath | sed 's/zip_folder/_/g' | sed 's/data_//g' | sed 's/\.csv//g' | sed 's/\//_/g' | sed 's/\.//g' | sed 's/^_//g'`; 
+    number_of_failures=`cat $fullpath  | sed '1d' | cut -d',' -f5 | grep 1 | wc -l`; 
+    number_of_drives=`cat $fullpath | sed '1d' | cut -d',' -f2 | sort | uniq | wc -l`; 
+    echo $filename $number_of_failures $number_of_drives >> failures_vs_drive_count_per_day.dat; 
+done
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
 <div class="prompt input_prompt">In&nbsp;[2]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">df_header_only</span><span class="o">=</span><span class="n">pandas</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">&#39;zipped_data/data_Q2_2018.zip_folder/2018-04-01.csv&#39;</span><span class="p">,</span><span class="n">nrows</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
-<span class="c1">#df_header_only.head()</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">start_time</span><span class="o">=</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+<span class="n">df_np</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">&#39;data_synthesized_from_csvs/failures_vs_drive_count_per_day.dat&#39;</span><span class="p">,</span><span class="n">delimiter</span><span class="o">=</span><span class="s1">&#39; &#39;</span><span class="p">,</span><span class="n">header</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="n">df_np</span><span class="o">.</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;date in filename&#39;</span><span class="p">,</span><span class="s1">&#39;number of drives removed from service&#39;</span><span class="p">,</span><span class="s1">&#39;number of unique drives&#39;</span><span class="p">]</span>
+<span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;date&#39;</span><span class="p">]</span><span class="o">=</span><span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;date in filename&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="s1">&#39;%Y-%m-</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">))</span>
+<span class="n">df_np</span><span class="o">.</span><span class="n">drop</span><span class="p">([</span><span class="s1">&#39;date in filename&#39;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;ratio of drives removed from service to count per day&#39;</span><span class="p">]</span><span class="o">=</span><span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;number of drives removed from service&#39;</span><span class="p">]</span><span class="o">/</span><span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;number of unique drives&#39;</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;elapsed:&#39;</span><span class="p">,</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span><span class="o">-</span><span class="n">start_time</span><span class="p">,</span><span class="s1">&#39;seconds&#39;</span><span class="p">)</span>
+<span class="n">df_np</span><span class="o">.</span><span class="n">shape</span>
 </pre></div>
 
 </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>elapsed: 0.05575299263000488 seconds
+</pre>
+</div>
+</div>
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[2]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>(2092, 4)</pre>
+</div>
+
+</div>
+
 </div>
 </div>
 
@@ -11876,9 +11910,7 @@ cat all_failures_all_smart__column_count_varies.log | cut -d',' -f1-31 > all_fai
 <div class="prompt input_prompt">In&nbsp;[3]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">&#39;data_synthesized_from_csvs/all_failures_smart_columns1to31.log&#39;</span><span class="p">,</span><span class="n">header</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-<span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="o">=</span><span class="n">df_header_only</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">31</span><span class="p">]</span>
-<span class="n">df</span><span class="o">.</span><span class="n">shape</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">df_np</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 
 </div>
@@ -11895,9 +11927,70 @@ cat all_failures_all_smart__column_count_varies.log | cut -d',' -f1-31 > all_fai
 
 
 
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
 
-<div class="output_text output_subarea output_execute_result">
-<pre>(8743, 31)</pre>
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>number of failures</th>
+      <th>number of unique drives</th>
+      <th>date</th>
+      <th>ratio of failures to count per day</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>6</td>
+      <td>102094</td>
+      <td>2018-05-22</td>
+      <td>0.000059</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>3</td>
+      <td>100576</td>
+      <td>2018-06-13</td>
+      <td>0.000030</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>4</td>
+      <td>100064</td>
+      <td>2018-04-30</td>
+      <td>0.000040</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>6</td>
+      <td>100529</td>
+      <td>2018-06-14</td>
+      <td>0.000060</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>6</td>
+      <td>101864</td>
+      <td>2018-05-25</td>
+      <td>0.000059</td>
+    </tr>
+  </tbody>
+</table>
+</div>
 </div>
 
 </div>
@@ -11905,38 +11998,20 @@ cat all_failures_all_smart__column_count_varies.log | cut -d',' -f1-31 > all_fai
 </div>
 </div>
 
-</div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
-<p>Extrapolating failure rates from Backblaze has a few assumptions:</p>
-<ul>
-<li>drive technology is heterogeneous in the BackBlaze data set</li>
-<li>drive vendor/model/batch is heterogeneous in the BackBlaze data set</li>
-<li>does not account for time drive exists prior to production use</li>
-<li>read/write pattern is specific to BackBlaze</li>
-<li>read/write throughput per year is specific to BackBlaze</li>
-</ul>
-<p>Given those caveats, we'll use the Backblaze failures as a sampling distribution</p>
-
-</div>
-</div>
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
 <div class="prompt input_prompt">In&nbsp;[4]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">max_hours</span><span class="o">=</span><span class="mi">50000</span>
-<span class="n">max_days</span><span class="o">=</span><span class="n">max_hours</span><span class="o">//</span><span class="mi">24</span>
-<span class="n">number_drives_failed_that_day</span><span class="p">,</span> <span class="n">day_index</span><span class="p">,</span> <span class="n">patches</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;smart_9_raw&#39;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">max_hours</span><span class="p">][</span><span class="s1">&#39;smart_9_raw&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">how</span><span class="o">=</span><span class="s1">&#39;any&#39;</span><span class="p">)</span><span class="o">/</span><span class="mi">24</span><span class="p">,</span> 
-                            <span class="n">bins</span><span class="o">=</span><span class="n">max_days</span><span class="p">,</span> 
-                            <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;blue&#39;</span><span class="p">,</span> 
-                            <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;power on days&#39;</span><span class="p">,</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;count&#39;</span><span class="p">,</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">);</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;all drives&#39;</span><span class="p">,</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">);</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;TP drive predicted to be removed is removed&#39;</span><span class="p">]</span><span class="o">=</span><span class="mi">0</span>
+<span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;TN drive expected to work continues to work&#39;</span><span class="p">]</span><span class="o">=</span><span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;number of unique drives&#39;</span><span class="p">]</span><span class="o">-</span><span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;number of failures&#39;</span><span class="p">]</span>
+<span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;FP drive predicted to be removed is not removed&#39;</span><span class="p">]</span><span class="o">=</span><span class="mi">0</span>
+<span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;FN drive expected to work is removed&#39;</span><span class="p">]</span><span class="o">=</span><span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;number of failures&#39;</span><span class="p">]</span>
+
+<span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;overall error rate in %&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">100.0</span><span class="o">*</span><span class="p">((</span><span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;FP drive predicted to be removed is not removed&#39;</span><span class="p">]</span><span class="o">+</span><span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;FN drive expected to work is removed&#39;</span><span class="p">])</span><span class="o">/</span><span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;number of unique drives&#39;</span><span class="p">])</span>
+
+<span class="n">df_np</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 
 </div>
@@ -11949,15 +12024,104 @@ cat all_failures_all_smart__column_count_varies.log | cut -d',' -f1-31 > all_fai
 
 <div class="output_area">
 
-<div class="prompt"></div>
+<div class="prompt output_prompt">Out[4]:</div>
 
 
 
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
 
-<div class="output_png output_subarea ">
-<img src="data:image/png;base64,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
-"
->
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>number of failures</th>
+      <th>number of unique drives</th>
+      <th>date</th>
+      <th>ratio of failures to count per day</th>
+      <th>TP drive predicted to be removed is removed</th>
+      <th>TN drive expected to work continues to work</th>
+      <th>FP drive predicted to be removed is not removed</th>
+      <th>FN drive expected to work is removed</th>
+      <th>overall error rate in %</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>6</td>
+      <td>102094</td>
+      <td>2018-05-22</td>
+      <td>0.000059</td>
+      <td>0</td>
+      <td>102088</td>
+      <td>0</td>
+      <td>6</td>
+      <td>0.005877</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>3</td>
+      <td>100576</td>
+      <td>2018-06-13</td>
+      <td>0.000030</td>
+      <td>0</td>
+      <td>100573</td>
+      <td>0</td>
+      <td>3</td>
+      <td>0.002983</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>4</td>
+      <td>100064</td>
+      <td>2018-04-30</td>
+      <td>0.000040</td>
+      <td>0</td>
+      <td>100060</td>
+      <td>0</td>
+      <td>4</td>
+      <td>0.003997</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>6</td>
+      <td>100529</td>
+      <td>2018-06-14</td>
+      <td>0.000060</td>
+      <td>0</td>
+      <td>100523</td>
+      <td>0</td>
+      <td>6</td>
+      <td>0.005968</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>6</td>
+      <td>101864</td>
+      <td>2018-05-25</td>
+      <td>0.000059</td>
+      <td>0</td>
+      <td>101858</td>
+      <td>0</td>
+      <td>6</td>
+      <td>0.005890</td>
+    </tr>
+  </tbody>
+</table>
+</div>
 </div>
 
 </div>
@@ -11971,54 +12135,70 @@ cat all_failures_all_smart__column_count_varies.log | cut -d',' -f1-31 > all_fai
 <div class="prompt input_prompt">In&nbsp;[5]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="k">def</span> <span class="nf">create_ary</span><span class="p">(</span><span class="n">number_of_drives</span><span class="p">,</span><span class="n">lifespan_in_days</span><span class="p">):</span>
-    <span class="n">ary</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">empty</span><span class="p">([</span><span class="n">number_of_drives</span><span class="p">,</span><span class="n">lifespan_in_days</span><span class="p">])</span>
-    <span class="n">ary</span><span class="p">[:]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
-
-    <span class="n">start_time</span><span class="o">=</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-    <span class="c1"># initial lifespan</span>
-    <span class="k">for</span> <span class="n">drive_indx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">number_of_drives</span><span class="p">):</span>
-        <span class="n">ary</span><span class="p">[</span><span class="n">drive_indx</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">=</span><span class="mi">1</span> <span class="c1"># every drive exists on day 1</span>
-        <span class="c1"># https://docs.scipy.org/doc/numpy-1.14.0/reference/generated/numpy.random.choice.html</span>
-        <span class="n">drive_lifespan_in_days</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">day_index</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="n">p</span><span class="o">=</span><span class="n">number_drives_failed_that_day</span><span class="o">/</span><span class="nb">sum</span><span class="p">(</span><span class="n">number_drives_failed_that_day</span><span class="p">)))</span>
-<span class="c1">#        print(drive_lifespan_in_days)</span>
-<span class="c1">#        print(&#39;drive lifespan:&#39;,drive_lifespan_in_days)</span>
-        <span class="n">ary</span><span class="p">[</span><span class="n">drive_indx</span><span class="p">,</span><span class="mi">0</span><span class="p">:</span><span class="n">drive_lifespan_in_days</span><span class="p">]</span><span class="o">=</span><span class="mi">1</span>
-<span class="c1">#        print(ary[drive_indx,:])</span>
-    <span class="k">for</span> <span class="n">drive_indx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">number_of_drives</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">day_indx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">lifespan_in_days</span><span class="p">):</span>
-            <span class="k">while</span> <span class="n">ary</span><span class="p">[</span><span class="n">drive_indx</span><span class="p">,</span><span class="n">day_indx</span><span class="p">]</span><span class="o">&lt;</span><span class="mi">0</span><span class="p">:</span>
-                <span class="n">drive_lifespan_in_days</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">day_index</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="n">p</span><span class="o">=</span><span class="n">number_drives_failed_that_day</span><span class="o">/</span><span class="nb">sum</span><span class="p">(</span><span class="n">number_drives_failed_that_day</span><span class="p">)))</span>
-                <span class="c1">#print(drive_lifespan_in_days)</span>
-                <span class="c1">#print(&#39;drive:&#39;,drive_indx)</span>
-                <span class="c1">#print(&#39;day indx:&#39;,day_indx)</span>
-                <span class="c1">#print(&#39;end = &#39;,min([day_indx+drive_lifespan_in_days,lifespan_in_days]))</span>
-                <span class="c1">#print(ary[drive_indx,:])</span>
-                <span class="n">ary</span><span class="p">[</span><span class="n">drive_indx</span><span class="p">,</span><span class="n">day_indx</span><span class="p">:</span><span class="nb">min</span><span class="p">([</span><span class="n">day_indx</span><span class="o">+</span><span class="n">drive_lifespan_in_days</span><span class="p">,</span><span class="n">lifespan_in_days</span><span class="p">])]</span> <span class="o">=</span> <span class="n">ary</span><span class="p">[</span><span class="n">drive_indx</span><span class="p">,</span><span class="n">day_indx</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span>
-                <span class="c1">#print(ary[drive_indx,:])</span>
-        <span class="c1">#print(&quot;\n&quot;)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;elapsed:&#39;</span><span class="p">,</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span><span class="o">-</span><span class="n">start_time</span><span class="p">,</span><span class="s1">&#39;seconds&#39;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">ary</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">plot_date</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;date&#39;</span><span class="p">],</span><span class="n">y</span><span class="o">=</span><span class="n">df_np</span><span class="p">[</span><span class="s1">&#39;overall error rate in %&#39;</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Make no predictions&#39;</span><span class="p">,</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;date&#39;</span><span class="p">,</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;overall error rate [%]&#39;</span><span class="p">,</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">);</span>
 </pre></div>
 
 </div>
 </div>
 </div>
 
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+
+
+<div class="output_png output_subarea ">
+<img src="data:image/png;base64,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
+"
+>
 </div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="random-prediction">random prediction<a class="anchor-link" href="#random-prediction">&#182;</a></h1><p>"in the next three days, this drive will be removed"</p>
+<ul>
+<li>drive could be removed tomorrow (today+1)</li>
+<li>drive could be removed today+2</li>
+<li>drive could be removed today+3</li>
+</ul>
+<p>for each day, get list of drives</p>
+<p>from that list, select <code>(random_failure_rate)*len(list_of_drives)</code> to be removed.</p>
+<ul>
+<li>TP=0</li>
+<li>TN=92.5</li>
+<li>FP=4.9</li>
+<li>FN=2.57</li>
+</ul>
+<p>overall error rate = (FP+FN)/total = 7.5</p>
+
+</div>
+</div>
+</div>date; time find . | grep csv | while read full_path; do cat $full_path | sed '1d' | cut -d',' -f1-3,5; done > all_drives_no_smart.dat; date
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
 <div class="prompt input_prompt">In&nbsp;[6]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">lifespan_in_days</span><span class="o">=</span><span class="mi">365</span><span class="o">*</span><span class="mi">10</span>
-<span class="n">number_of_drives</span><span class="o">=</span><span class="mi">1500</span>
-
-<span class="n">ary</span> <span class="o">=</span> <span class="n">create_ary</span><span class="p">(</span><span class="n">number_of_drives</span><span class="p">,</span><span class="n">lifespan_in_days</span><span class="p">)</span>
-
-<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;initial:&#39;</span><span class="p">,</span><span class="nb">sum</span><span class="p">(</span><span class="n">ary</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]))</span>
-<span class="c1"># by summing right column, we can get the cumulative number of drives</span>
-<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;final sum:&#39;</span><span class="p">,</span><span class="nb">sum</span><span class="p">(</span><span class="n">ary</span><span class="p">[:,</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">start_time</span><span class="o">=</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+<span class="n">df_rp</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">&#39;data_synthesized_from_csvs/all_drives_no_smart.dat&#39;</span><span class="p">,</span><span class="n">header</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span><span class="n">parse_dates</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;elapsed:&#39;</span><span class="p">,</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span><span class="o">-</span><span class="n">start_time</span><span class="p">,</span><span class="s1">&#39;seconds&#39;</span><span class="p">)</span>
 </pre></div>
 
 </div>
@@ -12035,9 +12215,7 @@ cat all_failures_all_smart__column_count_varies.log | cut -d',' -f1-31 > all_fai
 
 
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>elapsed: 4.969458818435669 seconds
-initial: 1500.0
-final sum: 8396.0
+<pre>elapsed: 149.6175844669342 seconds
 </pre>
 </div>
 </div>
@@ -12045,26 +12223,13 @@ final sum: 8396.0
 </div>
 </div>
 
-</div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
-<p>heatmap image shows drive replacement over time for a single simulation</p>
-<p>Time goes left-to-right: Left side is "initial status" and right side is "final status."</p>
-
-</div>
-</div>
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
 <div class="prompt input_prompt">In&nbsp;[7]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">15</span><span class="p">,</span><span class="mi">8</span><span class="p">))</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">ary</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;hot&#39;</span><span class="p">,</span> <span class="n">interpolation</span><span class="o">=</span><span class="s1">&#39;nearest&#39;</span><span class="p">);</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;days&#39;</span><span class="p">,</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;drive index&#39;</span><span class="p">,</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">);</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">df_rp</span><span class="o">.</span><span class="n">shape</span>
 </pre></div>
 
 </div>
@@ -12077,15 +12242,13 @@ final sum: 8396.0
 
 <div class="output_area">
 
-<div class="prompt"></div>
+<div class="prompt output_prompt">Out[7]:</div>
 
 
 
 
-<div class="output_png output_subarea ">
-<img src="data:image/png;base64,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
-"
->
+<div class="output_text output_subarea output_execute_result">
+<pre>(126827076, 4)</pre>
 </div>
 
 </div>
@@ -12093,25 +12256,55 @@ final sum: 8396.0
 </div>
 </div>
 
-</div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
-<p>Re-run this simulation to get a distribution of outcomes</p>
-
-</div>
-</div>
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
 <div class="prompt input_prompt">In&nbsp;[8]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">list_of_drive_counts</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="k">for</span> <span class="n">indx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
-    <span class="n">ary</span> <span class="o">=</span> <span class="n">create_ary</span><span class="p">(</span><span class="n">number_of_drives</span><span class="p">,</span><span class="n">lifespan_in_days</span><span class="p">)</span>
-    <span class="n">list_of_drive_counts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">ary</span><span class="p">[:,</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">df_rp</span><span class="o">.</span><span class="n">dtypes</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[8]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>0    datetime64[ns]
+1            object
+2            object
+3             int64
+dtype: object</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">start_time</span><span class="o">=</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+<span class="n">df_rp</span><span class="o">.</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;date&#39;</span><span class="p">,</span><span class="s1">&#39;drive serial&#39;</span><span class="p">,</span><span class="s1">&#39;drive model&#39;</span><span class="p">,</span><span class="s1">&#39;drive removed from service&#39;</span><span class="p">]</span>
+<span class="c1"># the following two steps are unnecessary due to the use of parse_dates</span>
+<span class="c1">#df_rp[&#39;date&#39;]=df_rp[&#39;date in filename&#39;].apply(lambda x: datetime.datetime.strptime(x,&#39;%Y-%m-%d&#39;))</span>
+<span class="c1">#df_rp.drop([&#39;date in filename&#39;], axis=1,inplace=True)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;elapsed:&#39;</span><span class="p">,</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span><span class="o">-</span><span class="n">start_time</span><span class="p">,</span><span class="s1">&#39;seconds&#39;</span><span class="p">)</span>
 </pre></div>
 
 </div>
@@ -12128,106 +12321,7 @@ final sum: 8396.0
 
 
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>elapsed: 5.04577374458313 seconds
-elapsed: 5.050820589065552 seconds
-elapsed: 5.154571533203125 seconds
-elapsed: 5.261159181594849 seconds
-elapsed: 5.318852424621582 seconds
-elapsed: 5.2335264682769775 seconds
-elapsed: 5.222853183746338 seconds
-elapsed: 5.116400718688965 seconds
-elapsed: 5.156287431716919 seconds
-elapsed: 5.237210750579834 seconds
-elapsed: 5.252328634262085 seconds
-elapsed: 5.211637735366821 seconds
-elapsed: 5.237936496734619 seconds
-elapsed: 5.267507791519165 seconds
-elapsed: 5.27951717376709 seconds
-elapsed: 5.208266258239746 seconds
-elapsed: 5.252132177352905 seconds
-elapsed: 5.230208396911621 seconds
-elapsed: 5.198857069015503 seconds
-elapsed: 5.138091802597046 seconds
-elapsed: 5.146061420440674 seconds
-elapsed: 5.130908250808716 seconds
-elapsed: 5.12840461730957 seconds
-elapsed: 5.163543701171875 seconds
-elapsed: 5.162506580352783 seconds
-elapsed: 5.08320426940918 seconds
-elapsed: 5.118050813674927 seconds
-elapsed: 5.143949508666992 seconds
-elapsed: 5.119701147079468 seconds
-elapsed: 5.107584476470947 seconds
-elapsed: 5.150885820388794 seconds
-elapsed: 5.041784763336182 seconds
-elapsed: 5.116059064865112 seconds
-elapsed: 5.119296073913574 seconds
-elapsed: 5.151350259780884 seconds
-elapsed: 5.139135360717773 seconds
-elapsed: 5.0662925243377686 seconds
-elapsed: 5.104346036911011 seconds
-elapsed: 5.092221736907959 seconds
-elapsed: 5.098390102386475 seconds
-elapsed: 5.203756332397461 seconds
-elapsed: 5.3006203174591064 seconds
-elapsed: 5.233245372772217 seconds
-elapsed: 5.104794502258301 seconds
-elapsed: 5.0915868282318115 seconds
-elapsed: 5.100254774093628 seconds
-elapsed: 5.079478740692139 seconds
-elapsed: 5.089666843414307 seconds
-elapsed: 5.104024648666382 seconds
-elapsed: 5.086277484893799 seconds
-elapsed: 5.100026369094849 seconds
-elapsed: 5.084925651550293 seconds
-elapsed: 5.0372841358184814 seconds
-elapsed: 5.128356695175171 seconds
-elapsed: 5.106295824050903 seconds
-elapsed: 5.085468292236328 seconds
-elapsed: 5.137332916259766 seconds
-elapsed: 5.1073901653289795 seconds
-elapsed: 5.096286058425903 seconds
-elapsed: 5.137896299362183 seconds
-elapsed: 5.077430009841919 seconds
-elapsed: 5.101404428482056 seconds
-elapsed: 5.047858476638794 seconds
-elapsed: 5.092929840087891 seconds
-elapsed: 5.105214595794678 seconds
-elapsed: 5.071438312530518 seconds
-elapsed: 5.1497790813446045 seconds
-elapsed: 5.096721172332764 seconds
-elapsed: 5.086073637008667 seconds
-elapsed: 5.103805780410767 seconds
-elapsed: 5.103344917297363 seconds
-elapsed: 5.227600336074829 seconds
-elapsed: 5.125780344009399 seconds
-elapsed: 5.157757759094238 seconds
-elapsed: 5.122168064117432 seconds
-elapsed: 5.088284492492676 seconds
-elapsed: 5.098348379135132 seconds
-elapsed: 5.1348631381988525 seconds
-elapsed: 5.107399940490723 seconds
-elapsed: 5.116827726364136 seconds
-elapsed: 5.081140995025635 seconds
-elapsed: 5.082913875579834 seconds
-elapsed: 5.071341037750244 seconds
-elapsed: 5.078421115875244 seconds
-elapsed: 5.095585823059082 seconds
-elapsed: 5.113112926483154 seconds
-elapsed: 5.087881088256836 seconds
-elapsed: 5.113469839096069 seconds
-elapsed: 5.139415502548218 seconds
-elapsed: 5.102813482284546 seconds
-elapsed: 5.1270751953125 seconds
-elapsed: 5.078030586242676 seconds
-elapsed: 5.104695558547974 seconds
-elapsed: 5.092835187911987 seconds
-elapsed: 5.1148927211761475 seconds
-elapsed: 5.126449346542358 seconds
-elapsed: 5.089248895645142 seconds
-elapsed: 5.007911920547485 seconds
-elapsed: 5.1159257888793945 seconds
-elapsed: 5.097278833389282 seconds
+<pre>elapsed: 0.0011038780212402344 seconds
 </pre>
 </div>
 </div>
@@ -12236,23 +12330,236 @@ elapsed: 5.097278833389282 seconds
 </div>
 
 </div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
 <div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
-<p>show the spread on number of drives</p>
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">daily_failure_rate</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="mf">10.0</span><span class="o">/</span><span class="mf">100000.0</span><span class="p">)</span>
+</pre></div>
 
 </div>
 </div>
 </div>
+
+</div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="prompt input_prompt">In&nbsp;[11]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">list_of_drive_counts</span><span class="p">,</span><span class="n">bins</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;total drive count&#39;</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;count&#39;</span><span class="p">);</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">list_of_dates</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">df_rp</span><span class="p">[</span><span class="s1">&#39;date&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">())</span>
+<span class="n">list_of_dates</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+<span class="nb">len</span><span class="p">(</span><span class="n">list_of_dates</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[11]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>2089</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[12]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">len</span><span class="p">(</span><span class="n">list_of_dates</span><span class="p">)</span><span class="o">/</span><span class="mf">365.25</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[12]:</div>
+
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>5.71937029431896</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[13]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">df_rand_by_date</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">DataFrame</span><span class="o">.</span><span class="n">from_dict</span><span class="p">({</span><span class="s1">&#39;dates&#39;</span><span class="p">:</span><span class="n">list_of_dates</span><span class="p">,</span>
+                                              <span class="s1">&#39;TP drive predicted to be removed is removed&#39;</span><span class="p">:</span><span class="n">numpy</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span>
+                                              <span class="s1">&#39;TN drive expected to work continues to work&#39;</span><span class="p">:</span><span class="n">numpy</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span>
+                                              <span class="s1">&#39;FP drive predicted to be removed is not removed&#39;</span><span class="p">:</span><span class="n">numpy</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span>
+                                              <span class="s1">&#39;FN drive expected to work is removed&#39;</span><span class="p">:</span><span class="n">numpy</span><span class="o">.</span><span class="n">nan</span><span class="p">,})</span>
+<span class="n">df_rand_by_date</span><span class="o">=</span><span class="n">df_rand_by_date</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;dates&#39;</span><span class="p">)</span>
+<span class="n">df_rand_by_date</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[13]:</div>
+
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>TP drive predicted to be removed is removed</th>
+      <th>TN drive expected to work continues to work</th>
+      <th>FP drive predicted to be removed is not removed</th>
+      <th>FN drive expected to work is removed</th>
+    </tr>
+    <tr>
+      <th>dates</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>2013-04-10</th>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2013-04-11</th>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2013-04-12</th>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2013-04-13</th>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2013-04-14</th>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[14]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">start_time</span><span class="o">=</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+
+<span class="n">prediction_window</span> <span class="o">=</span> <span class="mi">3</span> <span class="c1"># &quot;3&quot; means given measurements today, look three days in advance</span>
+<span class="n">days</span><span class="o">=</span><span class="p">[]</span>
+<span class="n">failed_drives</span><span class="o">=</span><span class="p">{}</span>
+<span class="k">for</span> <span class="n">indx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">list_of_dates</span><span class="p">)</span><span class="o">-</span><span class="n">prediction_window</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;indx=&#39;</span><span class="p">,</span><span class="n">indx</span><span class="p">)</span>
+    <span class="c1"># create list of days for this window</span>
+    <span class="k">for</span> <span class="n">window_indx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">prediction_window</span><span class="o">+</span><span class="mi">1</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;window index=&#39;</span><span class="p">,</span><span class="n">window_indx</span><span class="p">)</span>
+        <span class="c1"># 0 = today; 1 = tomorrow, 2 = day-after-tomorrow, etc</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">list_of_dates</span><span class="p">[</span><span class="n">indx</span><span class="o">+</span><span class="n">window_indx</span><span class="p">])</span>
+            <span class="n">days</span><span class="p">[</span><span class="n">window_indx</span><span class="p">]</span> <span class="o">=</span> <span class="n">list_of_dates</span><span class="p">[</span><span class="n">indx</span><span class="o">+</span><span class="n">window_indx</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;end of scan:&#39;</span><span class="p">,</span><span class="nb">len</span><span class="p">(</span><span class="n">list_of_dates</span><span class="p">),</span><span class="s1">&#39;indx=&#39;</span><span class="p">,</span><span class="n">indx</span><span class="p">)</span>
+            <span class="k">break</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">days</span><span class="p">)</span>
+    <span class="c1"># &quot;prediction&quot; step: select a random set of drives from today that are going to fail in the next N days</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;today:&#39;</span><span class="p">,</span><span class="n">days</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">df_rp</span><span class="p">[</span><span class="n">df_rp</span><span class="p">[</span><span class="s1">&#39;date&#39;</span><span class="p">]</span><span class="o">==</span><span class="n">days</span><span class="p">[</span><span class="mi">0</span><span class="p">]])</span>
+    
+    <span class="n">drives_predicted_to_fail</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">df_rp</span><span class="p">[</span><span class="n">df_rp</span><span class="p">[</span><span class="s1">&#39;date&#39;</span><span class="p">]</span><span class="o">==</span><span class="n">days</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="n">daily_failure_rate</span><span class="p">)[</span><span class="s1">&#39;drive serial&#39;</span><span class="p">])</span>
+
+    <span class="c1"># which drives actually failed the next day?</span>
+    <span class="n">failed_drives</span><span class="o">=</span><span class="p">[]</span>
+    <span class="k">for</span> <span class="n">next_days_indx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">prediction_window</span><span class="o">+</span><span class="mi">1</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">serl</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">df_rp</span><span class="p">[</span><span class="n">df_rp</span><span class="p">[</span><span class="s1">&#39;date&#39;</span><span class="p">]</span><span class="o">==</span><span class="n">days</span><span class="p">[</span><span class="n">next_days_indx</span><span class="p">]</span> <span class="o">&amp;</span> <span class="n">df_rp</span><span class="p">[</span><span class="s1">&#39;failure&#39;</span><span class="p">]</span><span class="o">==</span><span class="mi">1</span><span class="p">][</span><span class="s1">&#39;drive serial&#39;</span><span class="p">]):</span>
+            <span class="n">failed_drives</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">serl</span><span class="p">)</span>
+    <span class="n">failed_drives</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">failed_drives</span><span class="p">)</span>
+    
+    <span class="n">df_rand_by_date</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">days</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="s1">&#39;TP drive predicted to be removed is removed&#39;</span><span class="p">]</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">drives_predicted_to_fail</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span><span class="n">failed_drives</span><span class="p">))</span>
+    <span class="n">df_rand_by_date</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">days</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="s1">&#39;TN drive expected to work continues to work&#39;</span><span class="p">]</span><span class="o">=</span><span class="mi">0</span>
+    <span class="n">df_rand_by_date</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">days</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="s1">&#39;FP drive predicted to be removed is not removed&#39;</span><span class="p">]</span><span class="o">=</span><span class="mi">0</span>
+    <span class="n">df_rand_by_date</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">days</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="s1">&#39;FN drive expected to work is removed&#39;</span><span class="p">]</span><span class="o">=</span><span class="mi">0</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;elapsed:&#39;</span><span class="p">,</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span><span class="o">-</span><span class="n">start_time</span><span class="p">,</span><span class="s1">&#39;seconds&#39;</span><span class="p">)</span>
 </pre></div>
 
 </div>
@@ -12268,16 +12575,92 @@ elapsed: 5.097278833389282 seconds
 <div class="prompt"></div>
 
 
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>indx= 0
+window index= 0
+2013-04-10T00:00:00.000000000
+end of scan: 2089 indx= 0
+[]
+</pre>
+</div>
+</div>
+
+<div class="output_area">
+
+<div class="prompt"></div>
 
 
-<div class="output_png output_subarea ">
-<img src="data:image/png;base64,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
-"
->
+<div class="output_subarea output_text output_error">
+<pre>
+
+<span class="ansi-red-fg">IndexError</span>Traceback (most recent call last)
+<span class="ansi-green-fg">&lt;ipython-input-14-a008084520c2&gt;</span> in <span class="ansi-cyan-fg">&lt;module&gt;</span>
+<span class="ansi-green-intense-fg ansi-bold">     18</span>     print<span class="ansi-blue-fg">(</span>days<span class="ansi-blue-fg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">     19</span>     <span class="ansi-red-fg"># &#34;prediction&#34; step: select a random set of drives from today that are going to fail in the next N days</span>
+<span class="ansi-green-fg">---&gt; 20</span><span class="ansi-red-fg">     </span>print<span class="ansi-blue-fg">(</span><span class="ansi-blue-fg">&#39;today:&#39;</span><span class="ansi-blue-fg">,</span>days<span class="ansi-blue-fg">[</span><span class="ansi-cyan-fg">0</span><span class="ansi-blue-fg">]</span><span class="ansi-blue-fg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">     21</span>     print<span class="ansi-blue-fg">(</span>df_rp<span class="ansi-blue-fg">[</span>df_rp<span class="ansi-blue-fg">[</span><span class="ansi-blue-fg">&#39;date&#39;</span><span class="ansi-blue-fg">]</span><span class="ansi-blue-fg">==</span>days<span class="ansi-blue-fg">[</span><span class="ansi-cyan-fg">0</span><span class="ansi-blue-fg">]</span><span class="ansi-blue-fg">]</span><span class="ansi-blue-fg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">     22</span> 
+
+<span class="ansi-red-fg">IndexError</span>: list index out of range</pre>
+</div>
 </div>
 
 </div>
+</div>
 
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">list_of_dates</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="simple-heuristic:-measure-exceeds-threshold">simple heuristic: measure exceeds threshold<a class="anchor-link" href="#simple-heuristic:-measure-exceeds-threshold">&#182;</a></h1><p>threshold_for_raw5=1000</p>
+<p>prediction_window_in_days=3</p>
+<p>for each drive, if raw5&gt;1000, then predict that in the next 3 days the drive will fail</p>
+<p>tp_drive_predicted_to_be_removed_is_removed=0
+tn_drive_expected_to_work_continues_to_work=0
+fp_drive_predicted_to_be_removed_is_not_removed=0
+fn_drive_expected_to_work_is_removed=0</p>
+<ul>
+<li>TP=0.13</li>
+<li>TN=97.3</li>
+<li>FP=0.039</li>
+<li>FN=2.49</li>
+</ul>
+<p>overall error rate = 2.5</p>
+
+</div>
+</div>
+</div>date; time head -n 10000000 all_drives_no_smart.log | sed '/^date,.*/d' | cut -d',' -f1 | sort | uniq ; date
+13 seconds
+
+date; time cat all_drives_no_smart.log | grep 2018-06-29 --count; date
+24 seconds
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">tp_drive_predicted_to_be_removed_is_removed</span><span class="o">=</span><span class="mi">0</span>
+<span class="n">tn_drive_expected_to_work_continues_to_work</span><span class="o">=</span><span class="mi">0</span>
+<span class="n">fp_drive_predicted_to_be_removed_is_not_removed</span><span class="o">=</span><span class="mi">0</span>
+<span class="n">fn_drive_expected_to_work_is_removed</span><span class="o">=</span><span class="mi">0</span>
+</pre></div>
+
+</div>
 </div>
 </div>
 
